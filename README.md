@@ -48,6 +48,15 @@ the header and size offline.
    `boot_a`.
 4. Later: a UFS reader, so that kernels can live in real partitions instead of inside `boot_a`.
 
+## How this project is made / affiliation
+
+- This project is developed with the help of AI coding assistants (Anthropic Claude). Commits
+  carry a `Co-Authored-By: Claude` trailer; every change is reviewed and tested on the device
+  by the human maintainer (serlk), who is responsible for it.
+- It is **not affiliated with postmarketOS** or MT6878-Mainline. We build on their GPL kernel
+  work (thanks!), but postmarketOS does not accept AI-assisted contributions, so nothing from
+  here is submitted to postmarketOS, and this is not a postmarketOS port.
+
 ## Sources
 
 The hardware facts used here (addresses, register values, the state the stock
