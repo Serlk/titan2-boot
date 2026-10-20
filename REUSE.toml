@@ -1,0 +1,6 @@
+version = 1
+
+[[annotations]]
+path = ["README.md", "README.ru.md", ".gitignore", "REUSE.toml"]
+SPDX-FileCopyrightText = "2026 serlk <22211586+Serlk@users.noreply.github.com>"
+SPDX-License-Identifier = "GPL-2.0-or-later"
