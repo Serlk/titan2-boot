@@ -17,7 +17,7 @@ in JEDEC JESD223/JESD220 and the MIPI UniPro specification; the public Linux dri
 |---|---|
 | UFSHCI registers (standard map) | 0x112b0000 |
 | M-PHY registers | 0x112a0000 |
-| PHY trim efuse word | 0x11f10260 (read-only) |
+| PHY trim efuse word | 0x11f10260 — **must not be accessed by the loader**: on the phone a read from it hangs the CPU (no fault, the watchdog resets the phone ~34 s later; observed 2026-10-24). The previous stage reads it before the loader runs and it is not handed over |
 | secure monitor call for the device reset | SMC `0xc2000276` (MediaTek SiP "UFS control", as in mainline `ufs-mediatek-sip.h`), x1 = 2 (device reset), x2 = 0 drive RST_n low / 1 release it. Return 0 on success |
 | interrupts | not used; everything is polled |
 | memory | MMU on, caches on (normal write-back) for the loader's memory: the transfer request list, the command descriptor and data buffers must be cleaned to PoC before the doorbell and invalidated after completion (`dcache_range()` in `src/mmu.h`) |
@@ -49,9 +49,11 @@ Up to 4 attempts of steps 3.1–3.4; any failure restarts at 3.1.
 All offsets are from 0x112a0000. "field[h:l] = v" means read-modify-write of only those bits.
 Steps in this order:
 
-1. Let E = the efuse word. If E bit 0 is 0: 0x803c field[11:8] = 0 and field[4:0] = 0x1e (bits
-   [7:5] and [31:12] kept); then 0x1004 field[29:24] = 0x13. If E bit 1 is 0: 0x813c field[11:8] = 0
-   and field[4:0] = 0x1e. (On the test phone E = 0x881d3c03, so both are skipped.)
+1. (Not done by the loader.) The previous stage applies defaults for untrimmed lanes depending on
+   the efuse word; those settings are among the M-PHY configuration that is still in effect at entry
+   (section 2). The efuse word is not readable by the loader (section 1), so this step is skipped. On
+   the test phone both lanes are trimmed, so the previous stage skips it as well. The mainline Linux
+   driver brings the link up after the previous stage without any of the writes of this section.
 2. For each lane block base B in 0x8000, 0x8100 (in this order): read X = B+0x3c. Let r = X[11:8]
    and c = X[4:0]. The trim index t is: c − 4 when r = 0; r + 27 when r is 1 or 2; r + 21 otherwise.
    Write B+0x38 (whole register) with four fields, everything else 0, all arithmetic on t taken as an
@@ -72,7 +74,7 @@ Steps in this order:
 8. 0x208c field[11:8] = 0x9; then (a second write) 0x208c field[27:24] = 0x1.
 9. 0x1010 bit 7 = 0.
 
-The step uses only the current register contents and the efuse, so repeating it is harmless.
+The step uses only the current register contents, so repeating it is harmless.
 
 ### 3.3 Before link startup (DME, local)
 

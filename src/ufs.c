@@ -15,7 +15,9 @@
  *
  * Sequence (section numbers of the spec):
  *   3.1 host enable: HCE off, device reset pulse via the SiP SMC, HCE on
- *   3.2 M-PHY setup: efuse-dependent defaults, per-lane trim, fixed values
+ *   3.2 M-PHY setup: per-lane trim, fixed values (step 1, the efuse-dependent
+ *       defaults, is left to the previous stage: the efuse word must not be
+ *       read here, the read hangs the CPU)
  *   3.3 local DME writes before the link comes up
  *   3.4 DME_LINKSTARTUP, device present
  *       (3.1-3.4 up to 4 times)
@@ -82,7 +84,6 @@ u32 ufs_mphy_trim_word(u32 t)
 /* spec 1 */
 #define HCI_BASE	0x112b0000UL
 #define MPHY_BASE	0x112a0000UL
-#define EFUSE_TRIM	0x11f10260UL
 #define SIP_UFS_CONTROL	0xc2000276UL
 #define SIP_DEVICE_RESET 2
 
@@ -279,18 +280,16 @@ static void mphy_setup(void)
 	static const u32 fixed[6] = {
 		0x1a191104, 0x1a191105, 0x09080602, 0x09080602, 0x0a0a0a04, 0x0a0a0a05,
 	};
-	u32 e = mmio_read32(EFUSE_TRIM);
 	int i, j;
 
-	/* 1: defaults for untrimmed lanes */
-	if (!(e & 1)) {
-		mphy_rmw(0x803c, BITS(11, 8) | BITS(4, 0), 0x1e);
-		mphy_rmw(0x1004, BITS(29, 24), 0x13u << 24);
-	}
-	if (!(e & 2))
-		mphy_rmw(0x813c, BITS(11, 8) | BITS(4, 0), 0x1e);
+	/*
+	 * 1: not done here. The defaults for untrimmed lanes depend on the PHY
+	 * trim efuse word, which the loader must not read (it hangs the CPU);
+	 * the previous stage has already applied them.
+	 */
 
 	/* 2: per-lane trim */
+	log_puts("UFS: M-PHY step 2\n");
 	for (i = 0; i < 2; i++) {
 		u32 t = ufs_mphy_trim_index(mmio_read32(MPHY_BASE + lane[i] + 0x3c));
 
@@ -298,11 +297,13 @@ static void mphy_setup(void)
 	}
 
 	/* 3 */
+	log_puts("UFS: M-PHY step 3\n");
 	mphy_rmw(0x2088, BITS(31, 24), 0x4au << 24);
 	mphy_rmw(0x2094, BITS(15, 0), 0x4a4a);
 	mphy_rmw(0x2098, BITS(31, 24), 0x4au << 24);
 
 	/* 4: one block completely before the next */
+	log_puts("UFS: M-PHY step 4\n");
 	for (i = 0; i < 2; i++) {
 		u32 b = blk[i];
 
@@ -315,24 +316,29 @@ static void mphy_setup(void)
 	}
 
 	/* 5 */
+	log_puts("UFS: M-PHY step 5\n");
 	for (i = 0; i < 2; i++)
 		for (j = 0; j < 6; j++)
 			mphy_write(blk[i] + 0x54 + 4 * j, fixed[j]);
 
 	/* 6 */
+	log_puts("UFS: M-PHY step 6\n");
 	for (i = 0; i < 2; i++)
 		mphy_rmw(blk[i] + 0xdc, BITS(29, 24) | BITS(13, 8), 0x30u << 24 | 0x30u << 8);
 
 	/* 7 */
+	log_puts("UFS: M-PHY step 7\n");
 	mphy_rmw(0x209c, BITS(31, 16), 0x8e8eu << 16);
 	mphy_rmw(0x2090, BITS(23, 16), 0x01u << 16);
 	mphy_rmw(0x2098, BITS(2, 0), 0);
 
 	/* 8: two separate writes */
+	log_puts("UFS: M-PHY step 8\n");
 	mphy_rmw(0x208c, BITS(11, 8), 0x9u << 8);
 	mphy_rmw(0x208c, BITS(27, 24), 0x1u << 24);
 
 	/* 9 */
+	log_puts("UFS: M-PHY step 9\n");
 	mphy_rmw(0x1010, 1u << 7, 0);
 }
 
@@ -829,6 +835,7 @@ int ufs_open(struct blk *disk)
 		goto fail;
 	log_puts("UFS: link up\n");
 
+	log_puts("UFS: transfer request list\n");
 	memset(utrl, 0, sizeof(utrl));
 	dcache_range(DCACHE_CLEAN_INVAL, list, list + sizeof(utrl));
 	hci_write(REG_UTRLBA, (u32)list);
@@ -840,14 +847,17 @@ int ufs_open(struct blk *disk)
 	}
 	hci_write(REG_UTRLRSR, 1);
 
+	log_puts("UFS: device init\n");
 	if (device_init())
 		goto fail;
 	log_puts("UFS: device initialised\n");
+	log_puts("UFS: power mode change\n");
 	if (power_mode_hs()) {
 		log_puts("UFS: HS-G4 power mode change failed\n");
 		goto fail;
 	}
 	log_puts("UFS: HS-G4 rate B, 1 lane\n");
+	log_puts("UFS: LU 2\n");
 	if (user_lu(disk))
 		goto fail;
 	log_hex("UFS: LU 2 ready, blocks ", disk->nblocks);
