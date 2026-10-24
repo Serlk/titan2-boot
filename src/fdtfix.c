@@ -15,7 +15,8 @@
  *    no-map, so simplefb can map it;
  *  - the LK entries of /chosen (atag,*, kaslr-seed, ram_console, ...);
  *  - the properties LK writes into device nodes the mainline drivers use
- *    (lk_props[] below) and the nodes LK creates for the modem.
+ *    (lk_props[] below; phandles into /reserved-memory: lk_refs[]) and the
+ *    nodes LK creates for the modem.
  *
  * bootargs are put together the way LK does it for a kernel booted directly:
  * the DTB's own bootargs (the mainline board DT needs clk_ignore_unused
@@ -53,6 +54,23 @@ static const struct lk_prop_rule lk_props[] = {
 	{ NULL, "mediatek,scp-audio-mbox", { "shared_memory", NULL } },
 	{ "/soc/gpueb", NULL, { "gpueb_mem_addr", "gpueb_mem_size", NULL } },
 	{ NULL, "mediatek,sspm", { "sspm-res-ram-start", NULL } },
+	/* CONNSYS EMI that LK carved out and loaded the firmware into (mtk-conninfra) */
+	{ NULL, "mediatek,mt6878-6637-consys", { "emi-addr", NULL } },
+};
+
+struct lk_ref_rule {
+	const char *path;	/* the same path in both FDTs */
+	const char *prop;	/* one phandle to a /reserved-memory node */
+};
+
+/*
+ * Phandle properties LK writes: the target is one of the /reserved-memory
+ * nodes copied above (without LK's phandle), so the reference is set to
+ * that copy, by node name.
+ */
+static const struct lk_ref_rule lk_refs[] = {
+	/* WFDMA pool (shared-dma-pool) for mt7921-soc */
+	{ "/wifi@18400000", "memory-region" },
 };
 
 /* root nodes LK creates for the modem */
@@ -297,6 +315,51 @@ static int fix_lk_props(void *dst, const void *lk)
 				log_err(what, pname, err);
 				return err;
 			}
+		}
+	}
+
+	for (i = 0; i < sizeof(lk_refs) / sizeof(lk_refs[0]); i++) {
+		const struct lk_ref_rule *r = &lk_refs[i];
+		const fdt32_t *ref;
+		const char *name;
+		uint32_t ph;
+		int len, s, t, rm, d;
+
+		s = fdt_path_offset(lk, r->path);
+		ref = s >= 0 ? fdt_getprop(lk, s, r->prop, &len) : NULL;
+		if (!ref || len != 4)
+			continue;
+		t = fdt_node_offset_by_phandle(lk, fdt32_to_cpu(*ref));
+		rm = fdt_path_offset(dst, "/reserved-memory");
+		name = t >= 0 ? fdt_get_name(lk, t, NULL) : NULL;
+		d = name && rm >= 0 ? fdt_subnode_offset(dst, rm, name) : -FDT_ERR_NOTFOUND;
+		if (d < 0) {
+			log_puts(r->path);
+			uart_puts(": target of ");
+			uart_puts(r->prop);
+			uart_puts(" not among the copied reserved-memory nodes\n");
+			continue;
+		}
+		ph = fdt_get_phandle(dst, d);
+		if (!ph) {
+			err = fdt_generate_phandle(dst, &ph);
+			if (!err)
+				err = fdt_setprop_u32(dst, d, "phandle", ph);
+			if (err) {
+				log_err(r->path, r->prop, err);
+				return err;
+			}
+		}
+		d = fdt_path_offset(dst, r->path);
+		if (d < 0) {
+			log_puts(r->path);
+			uart_puts(": not in the mainline DTB\n");
+			continue;
+		}
+		err = fdt_setprop_u32(dst, d, r->prop, ph);
+		if (err) {
+			log_err(r->path, r->prop, err);
+			return err;
 		}
 	}
 
