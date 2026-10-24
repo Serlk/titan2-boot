@@ -223,6 +223,9 @@ static const char *start_ufs(void)
 	if (tried)
 		return "UFS did not start";
 	tried = 1;
+	/* the UFS bring-up is not proven on the phone yet: keep its log after a reset */
+	pstore_log_start();
+	log_hex("pstore log, timer us ", timer_us());
 	if (ufs_open(&ufs_disk)) {
 		strcpy(storage_status, "UFS: failed to start");
 		return "UFS did not start";

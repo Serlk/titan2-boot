@@ -13,10 +13,48 @@
  * soldered) and the TX FIFO drains anyway, but never spin forever on it.
  * The QEMU test build (make qemu) writes to the PL011 of the virt machine.
  */
+/*
+ * Copy of the log in the console zone of Android's ramoops (pstore), started
+ * by pstore_log_start(): after a watchdog reset the next Android boot shows
+ * it in /sys/fs/pstore/console-ramoops-0. Layout from the stock command line
+ * (ramoops.mem_address=0x48090000 mem_size=0xe0000 console_size=0x40000
+ * pmsg_size=0x80000) and Android's record_size 0x1000, ftrace_size 0x1000:
+ * 31 dmesg zones, then the console zone. Zone header as in the kernel's
+ * struct persistent_ram_buffer: signature "DBGC", start, size, then the text.
+ */
+#define PSTORE_CONSOLE		0x480af000UL
+#define PSTORE_CONSOLE_SIZE	0x40000
+#define PSTORE_SIG		0x43474244
+
+static volatile u32 *plog;
+static u32 plog_len;
+
+void pstore_log_start(void)
+{
+	plog = (volatile u32 *)PSTORE_CONSOLE;
+	plog_len = 0;
+	plog[1] = 0;
+	plog[2] = 0;
+	plog[0] = PSTORE_SIG;
+}
+
+static void plog_putc(char c)
+{
+	if (!plog || plog_len >= PSTORE_CONSOLE_SIZE - 12)
+		return;
+	((volatile u8 *)&plog[3])[plog_len++] = c;
+	asm volatile("dsb st" ::: "memory");
+	plog[2] = plog_len;
+	plog[1] = plog_len;
+	asm volatile("dsb st" ::: "memory");
+}
+
 void uart_putc(char c)
 {
 	int n = 100000;
 
+	if (c != '\r')
+		plog_putc(c);
 	if (c == '\n')
 		uart_putc('\r');
 #ifdef T2_QEMU

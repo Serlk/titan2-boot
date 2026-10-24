@@ -67,6 +67,7 @@ static inline u32 mmio_read32(u64 addr)
 #define UART_LSR_THRE	0x20
 
 void uart_putc(char c);
+void pstore_log_start(void);	/* log also into Android's pstore console zone */
 void uart_puts(const char *s);
 void uart_hex(u64 v);
 void log_puts(const char *s);		/* "[titan2-boot] " + s */

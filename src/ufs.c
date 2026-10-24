@@ -228,10 +228,12 @@ static int host_disable(void)
 
 static int host_enable(void)
 {
+	log_puts("UFS: host disable\n");
 	if (host_disable()) {
 		log_puts("UFS: HCE does not clear\n");
 		return -1;
 	}
+	log_puts("UFS: device reset\n");
 	if (smc_device_reset(0)) {
 		log_puts("UFS: device reset SMC (assert) failed\n");
 		return -1;
@@ -242,6 +244,7 @@ static int host_enable(void)
 		return -1;
 	}
 	udelay(10000);
+	log_puts("UFS: host enable\n");
 	hci_write(REG_HCE, 1);
 	udelay(1000);
 	if (hci_poll(REG_HCE, 1, 1, T_HCE_ON)) {
@@ -811,9 +814,14 @@ int ufs_open(struct blk *disk)
 
 	for (i = 0; i < 4; i++) {
 		if (!host_enable()) {
+			log_puts("UFS: M-PHY setup\n");
 			mphy_setup();
-			if (!dme_pre_link() && !link_startup())
-				break;
+			log_puts("UFS: DME before link startup\n");
+			if (!dme_pre_link()) {
+				log_puts("UFS: link startup\n");
+				if (!link_startup())
+					break;
+			}
 		}
 		log_hex("UFS: bring-up attempt failed: ", i + 1);
 	}
