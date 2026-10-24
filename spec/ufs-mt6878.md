@@ -141,6 +141,15 @@ for NOP OUT, 1.7 s for QUERY). IS bits 2, 11, 16, 17 report errors. Response UPI
 byte 7 = SCSI status (0 GOOD, 2 CHECK CONDITION, the sense key is then in the low nibble of byte
 0x24).
 
+For a response UPIU of a SCSI command (byte 0 = 0x21), decide by the SCSI status in byte 7 only,
+not by byte 6. Observed on the phone (2026-10-24): the first TEST UNIT READY to LU 2 and the first
+START STOP UNIT to W-LUN 0xD0 after the device reset both complete with OCS 0, byte 6 = **0x01**,
+byte 7 = 0x02 (CHECK CONDITION), data segment length 0x14, sense (fixed format) with sense key 6
+UNIT ATTENTION and ASC 0x29 (power on / reset occurred). This is the expected unit attention and
+the command must simply be repeated (TEST UNIT READY loop of section 3.8; for START STOP UNIT,
+repeat once more after a CHECK CONDITION). The Linux driver behaves the same: it takes the SCSI
+status from the response UPIU and does not reject a non-zero byte 6.
+
 READ(10): CDB `28 00 LBA(4, big endian) 00 COUNT(2, big endian) 00`, at most 0x2000 blocks per
 command. COMMAND UPIU: byte 0 = 0x01, byte 1 = 0x40 (read) or 0, byte 2 = LUN, byte 3 = task tag,
 bytes 12–15 = expected transfer length (big endian), CDB from byte 16.

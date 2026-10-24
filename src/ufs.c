@@ -77,6 +77,36 @@ u32 ufs_mphy_trim_word(u32 t)
 	return a << 24 | b << 16 | c << 8 | d;
 }
 
+/*
+ * The outcome of a SCSI command from its response UPIU (spec 4), pure so the
+ * host test can check it. Decided by the SCSI status (byte 7) only, not by
+ * the response field (byte 6): the device answers the unit attention after
+ * its reset with byte 6 = 1 and a CHECK CONDITION. data: the command had a
+ * data phase (then flags bits 5/6, under/overflow, are a failure).
+ *   0 GOOD, 1 CHECK CONDITION (*sense_key = the sense key, 0 without sense
+ *   data), -1 not a RESPONSE UPIU, -2 another status, -3 residual count.
+ */
+int ufs_cmd_status(const u8 *rsp, int data, int *sense_key);
+
+int ufs_cmd_status(const u8 *rsp, int data, int *sense_key)
+{
+	u32 dsl = (u32)rsp[10] << 8 | rsp[11];
+
+	if (rsp[0] != 0x21)		/* RESPONSE UPIU */
+		return -1;
+	if (rsp[7] == 2) {
+		/* data segment: sense length (2), fixed-format sense, key in byte 2 */
+		if (sense_key)
+			*sense_key = dsl >= 5 ? rsp[0x24] & 0xf : 0;
+		return 1;
+	}
+	if (rsp[7])
+		return -2;
+	if (data && (rsp[1] & 0x60))
+		return -3;
+	return 0;
+}
+
 #ifndef UFS_HOST_TEST
 
 #include "mmu.h"
@@ -761,28 +791,23 @@ static int scsi_cmd(u8 lun, const u8 *cdb, u32 cdb_len, void *buf, u32 len,
 	memcpy(req + 16, cdb, cdb_len);
 	if (ufs_transfer(req, buf, len, T_CMD))
 		return -1;
-	if (rsp[0] != UPIU_RESPONSE || rsp[6]) {
-		log_hex("UFS: command response ", rsp[6]);
-		cmd_diag();
-		return -1;
-	}
-	if (rsp[7] == 2) {
-		if (sense_key)
-			*sense_key = rsp[0x24] & 0xf;
+	switch (ufs_cmd_status(rsp, len != 0, sense_key)) {
+	case 0:
+		return 0;
+	case 1:
 		return 1;
-	}
-	if (rsp[7]) {
+	case -1:
+		log_hex("UFS: not a response UPIU, transaction code ", rsp[0]);
+		break;
+	case -2:
 		log_hex("UFS: SCSI status ", rsp[7]);
-		cmd_diag();
-		return -1;
-	}
-	/* data commands: no underflow / overflow */
-	if (len && (rsp[1] & 0x60)) {
+		break;
+	default:
 		log_hex("UFS: residual transfer count ", get_be32(rsp + 12));
-		cmd_diag();
-		return -1;
+		break;
 	}
-	return 0;
+	cmd_diag();
+	return -1;
 }
 
 static int read10(u32 lba, u32 count, void *buf)
@@ -934,15 +959,20 @@ fail:
 void ufs_close(void)
 {
 	static const u8 ssu[6] = { SCSI_SSU, 0, 0, 0, 0x30, 0 };
-	int i;
+	int i, r, sk = 0;
 
 	if (!hw_touched)
 		return;
 	hci_write(REG_AHIT, 0);
 	if (can_send && !slot_dead) {
-		for (i = 0; i < 3; i++)
-			if (!scsi_cmd(WLUN_DEVICE, ssu, sizeof(ssu), NULL, 0, NULL))
+		/* a CHECK CONDITION (the unit attention after reset) is retried */
+		for (i = 0; i < 3; i++) {
+			r = scsi_cmd(WLUN_DEVICE, ssu, sizeof(ssu), NULL, 0, &sk);
+			if (!r)
 				break;
+			if (r > 0)
+				log_hex("UFS: START STOP UNIT: sense key ", sk);
+		}
 		if (i == 3)
 			log_puts("UFS: START STOP UNIT (power down) failed\n");
 	}
