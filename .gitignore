@@ -3,3 +3,4 @@ out/
 *.elf
 *.bin
 *.bin.gz
+out-qemu/

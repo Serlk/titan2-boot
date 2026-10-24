@@ -42,11 +42,41 @@ _text_start:
 	add	x1, x1, :lo12:_stack_top
 	mov	sp, x1
 
+	/* Zero the BSS: behind the image LK left whatever was unpacked there. */
+	adrp	x1, _bss_start
+	add	x1, x1, :lo12:_bss_start
+	adrp	x2, _bss_end
+	add	x2, x2, :lo12:_bss_end
+2:	cmp	x1, x2
+	b.hs	3f
+	str	xzr, [x1], #8
+	b	2b
+3:
+
 	bl	bl_main
 
 	/* bl_main should not return; if it does, spin. */
 1:	wfe
 	b	1b
+
+/*
+ * enter_kernel(entry, fdt): arm64 boot protocol (Documentation/arch/arm64/booting.rst).
+ * MMU and D-cache are off (as LK left them), so all our writes are already in
+ * memory; only the I-cache may hold stale lines for the kernel text.
+ */
+	.text
+	.globl enter_kernel
+enter_kernel:
+	mov	x19, x0
+	mov	x0, x1
+	mov	x1, xzr
+	mov	x2, xzr
+	mov	x3, xzr
+	dsb	sy
+	ic	iallu
+	dsb	sy
+	isb
+	br	x19
 
 	.section .bss.stack, "aw", @nobits
 	.balign 16

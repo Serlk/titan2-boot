@@ -8,7 +8,8 @@
 OUTPUT_ARCH(aarch64)
 ENTRY(_start)
 
-LOAD_ADDR = 0x40000000;
+/* the QEMU test build links higher: QEMU keeps its own DTB at the start of RAM */
+LOAD_ADDR = DEFINED(T2_LOAD_ADDR) ? T2_LOAD_ADDR : 0x40000000;
 
 SECTIONS
 {
@@ -20,12 +21,15 @@ SECTIONS
 	.data     : { *(.data .data.*) }
 	. = ALIGN(16);
 	_bss_start = .;
-	.bss (NOLOAD) : { *(.bss.stack) *(.bss .bss.*) *(COMMON) }
+	.bss (NOLOAD) : { *(.bss.stack) *(.bss .bss.*) *(COMMON) . = ALIGN(16); }
 	_bss_end = .;
 	_end = .;
 
 	/* Image header image_size: covers text+data+bss, rounded to 64 KiB. */
 	_image_size = ALIGN(_end - _text, 0x10000);
+
+	/* the payload table (src/pack.h, PACK_OFFSET) follows at 1 MiB */
+	ASSERT(_end - _text <= 0x100000, "titan2-boot does not fit below PACK_OFFSET")
 
 	/DISCARD/ : { *(.comment) *(.note*) *(.eh_frame*) *(.interp) }
 }

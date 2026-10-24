@@ -1,0 +1,4 @@
+libfdt from the Linux kernel tree (scripts/dtc/libfdt, Linux 7.2), unmodified.
+Upstream: https://git.kernel.org/pub/scm/utils/dtc/dtc.git
+Dual-licensed GPL-2.0-or-later OR BSD-2-Clause (see the SPDX line of each file).
+Only fdt.c, fdt_ro.c, fdt_rw.c, fdt_wip.c, fdt_strerror.c and fdt_addresses.c are built.
