@@ -173,6 +173,7 @@ static int hw_touched;	/* ufs_open() has touched the hardware */
 static int can_send;	/* list running and the device answered NOP OUT */
 static int slot_dead;	/* slot 0 could not be cleared: send nothing more */
 static u8 task_tag;
+static int req_dumped;	/* request UPIU of a failed command logged (once per ufs_open) */
 
 static inline u32 hci_read(u32 off)
 {
@@ -536,6 +537,52 @@ static int ufs_allowed(const u8 *upiu, u32 dw0, u32 len)
 	}
 }
 
+/* diagnostics: "[titan2-boot] UFS:   <what> +oo: xx xx ..." one line per 16 bytes */
+static void ufs_dump(const char *what, const u8 *p, u32 n)
+{
+	static const char hx[] = "0123456789abcdef";
+	u32 i;
+
+	for (i = 0; i < n; i++) {
+		if (!(i & 15)) {
+			if (i)
+				uart_putc('\n');
+			log_puts("UFS:   ");
+			uart_puts(what);
+			uart_puts(" +");
+			uart_putc(hx[(i >> 4) & 0xf]);
+			uart_putc(hx[i & 0xf]);
+			uart_putc(':');
+		}
+		uart_putc(' ');
+		uart_putc(hx[p[i] >> 4]);
+		uart_putc(hx[p[i] & 0xf]);
+	}
+	if (n)
+		uart_putc('\n');
+}
+
+/*
+ * After a failed command UPIU: the OCS of slot 0, the response UPIU header
+ * (32 bytes) and, when its data segment length is non-zero, the start of the
+ * data segment (sense data length + up to 18 bytes of sense data). The
+ * request UPIU only for the first failure of a bring-up.
+ */
+static void cmd_diag(void)
+{
+	const u8 *rsp = ucd + UCD_RSP;
+	u32 dsl = (u32)rsp[10] << 8 | rsp[11];
+
+	log_hex("UFS:   OCS ", utrl[2] & 0xff);
+	if (!req_dumped) {
+		req_dumped = 1;
+		ufs_dump("req", ucd, 32);
+	}
+	ufs_dump("rsp", rsp, 32);
+	if (dsl)
+		ufs_dump("sense", rsp + 32, dsl < 20 ? dsl : 20);
+}
+
 /*
  * Send one request UPIU (32 bytes: header + transaction fields) through slot
  * 0 and wait for completion. buf/len: data from the device, or len 0. buf
@@ -593,6 +640,11 @@ static int ufs_transfer(const u8 *req, void *buf, u32 len, u64 timeout)
 	hci_write(REG_UTRLDBR, 1);
 	if (hci_poll(REG_UTRLDBR, 1, 0, timeout)) {
 		log_hex("UFS: request timeout, UPIU type ", ucd[0]);
+		if (ucd[0] == UPIU_COMMAND) {
+			dcache_range(DCACHE_INVAL, (u64)utrl, (u64)utrl + sizeof(utrl));
+			dcache_range(DCACHE_INVAL, ucd_pa, ucd_pa + sizeof(ucd));
+			cmd_diag();
+		}
 		hci_write(REG_UTRLCLR, ~1u);
 		if (hci_poll(REG_UTRLDBR, 1, 0, T_CLEAR)) {
 			log_puts("UFS: slot 0 does not clear, UFS disabled\n");
@@ -610,14 +662,20 @@ static int ufs_transfer(const u8 *req, void *buf, u32 len, u64 timeout)
 	hci_write(REG_IS, is);
 	if (is & IS_ERRORS) {
 		log_hex("UFS: error interrupt status ", is);
+		if (ucd[0] == UPIU_COMMAND)
+			cmd_diag();
 		return -1;
 	}
 	if (utrl[2] & 0xff) {
 		log_hex("UFS: overall command status ", utrl[2] & 0xff);
+		if (ucd[0] == UPIU_COMMAND)
+			cmd_diag();
 		return -1;
 	}
 	if (ucd[UCD_RSP + 3] != ucd[3]) {
 		log_puts("UFS: response with a wrong task tag\n");
+		if (ucd[0] == UPIU_COMMAND)
+			cmd_diag();
 		return -1;
 	}
 	return 0;
@@ -705,6 +763,7 @@ static int scsi_cmd(u8 lun, const u8 *cdb, u32 cdb_len, void *buf, u32 len,
 		return -1;
 	if (rsp[0] != UPIU_RESPONSE || rsp[6]) {
 		log_hex("UFS: command response ", rsp[6]);
+		cmd_diag();
 		return -1;
 	}
 	if (rsp[7] == 2) {
@@ -714,11 +773,13 @@ static int scsi_cmd(u8 lun, const u8 *cdb, u32 cdb_len, void *buf, u32 len,
 	}
 	if (rsp[7]) {
 		log_hex("UFS: SCSI status ", rsp[7]);
+		cmd_diag();
 		return -1;
 	}
 	/* data commands: no underflow / overflow */
 	if (len && (rsp[1] & 0x60)) {
 		log_hex("UFS: residual transfer count ", get_be32(rsp + 12));
+		cmd_diag();
 		return -1;
 	}
 	return 0;
@@ -817,6 +878,7 @@ int ufs_open(struct blk *disk)
 	hw_touched = 1;
 	can_send = 0;
 	slot_dead = 0;
+	req_dumped = 0;
 
 	for (i = 0; i < 4; i++) {
 		if (!host_enable()) {
