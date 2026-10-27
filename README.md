@@ -35,7 +35,10 @@ Entry types (extlinux.conf):
 - **Linux:** the mainline DTB from the pack gets what LK found out at boot (`src/fdtfix.c`):
   `/memory`, every `/reserved-memory/mblock-*` node (the framebuffer gets `no-map`), LK's
   `/chosen` entries (`atag,*`, `kaslr-seed`, ...), the properties LK writes into the modem
-  nodes, and `/mdproperties`, `/md_attr_node`. bootargs as LK builds them: the DTB's own, then
+  nodes, and `/mdproperties`, `/md_attr_node`. A DTB node can ask for LK's phandles into
+  `/reserved-memory` (`titan2,lk-refs`) and change the regions they point to
+  (`titan2,lk-region-compatible`, `titan2,lk-region-map` drops `no-map`), e.g. the Wi-Fi pool as a
+  restricted DMA pool, without a new boot_a. bootargs as LK builds them: the DTB's own, then
   LK's earlycon, console and ramoops options, then the pack's command line.
 - **Fastboot / Recovery / Reboot:** through the reboot-mode register (`TOPRGU+0x24`) and a PSCI
   reset.

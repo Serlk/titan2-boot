@@ -35,7 +35,10 @@ U-Boot, `src/conf.c`) с пунктами меню; при `UFS on` в меню 
 - **Linux:** берётся DTB mainline из пачки, и в него переносится то, что LK узнал при загрузке
   (`src/fdtfix.c`): `/memory`, все узлы `/reserved-memory/mblock-*` (у фреймбуфера ставится
   `no-map`), записи LK в `/chosen` (`atag,*`, `kaslr-seed`, …), свойства, которые хуки LK пишут
-  в узлы модема, и узлы `/mdproperties`, `/md_attr_node`. bootargs собираются как у LK:
+  в узлы модема, и узлы `/mdproperties`, `/md_attr_node`. Узел DTB может запросить phandle LK в
+  `/reserved-memory` (`titan2,lk-refs`) и поменять регионы, на которые они указывают
+  (`titan2,lk-region-compatible`, `titan2,lk-region-map` снимает `no-map`) — так пул Wi-Fi
+  становится restricted DMA pool без нового boot_a. bootargs собираются как у LK:
   свои bootargs DTB, затем earlycon, console и ramoops от LK, затем cmdline из пачки.
 - **Fastboot / Recovery / Reboot:** через регистр reboot-mode (`TOPRGU+0x24`) и PSCI-сброс.
 - Если LK загрузился не в обычном режиме (recovery, зарядка в выключенном состоянии, будильник,
