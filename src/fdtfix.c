@@ -12,7 +12,8 @@
  *  - /memory reg (all DRAM);
  *  - every /reserved-memory/mblock-* node (BL31, TEE, GZ, modem, SCP, SSPM,
  *    pstore, framebuffer, ...) without its phandle; the framebuffer gets
- *    no-map, so simplefb can map it;
+ *    no-map, so simplefb can map it, and the Wi-Fi pool becomes a mapped
+ *    restricted-dma-pool;
  *  - the LK entries of /chosen (atag,*, kaslr-seed, ram_console, ...);
  *  - the properties LK writes into device nodes the mainline drivers use
  *    (lk_props[] below; phandles into /reserved-memory: lk_refs[]) and the
@@ -61,6 +62,7 @@ static const struct lk_prop_rule lk_props[] = {
 struct lk_ref_rule {
 	const char *path;	/* the same path in both FDTs */
 	const char *prop;	/* one phandle to a /reserved-memory node */
+	const char *pool;	/* or NULL: new compatible of the target, mapped */
 };
 
 /*
@@ -69,8 +71,14 @@ struct lk_ref_rule {
  * that copy, by node name.
  */
 static const struct lk_ref_rule lk_refs[] = {
-	/* WFDMA pool (shared-dma-pool) for mt7921-soc */
-	{ "/wifi@18400000", "memory-region" },
+	/*
+	 * WFDMA pool for mt7921-soc. LK's EMI MPU lets CONNSYS reach this
+	 * pool only, and MediaTek's driver copies every command, event and
+	 * frame through it. As a restricted DMA pool (which must not be
+	 * no-map) all DMA of the device bounces through it, not only the
+	 * rings.
+	 */
+	{ "/wifi@18400000", "memory-region", "restricted-dma-pool" },
 };
 
 /* root nodes LK creates for the modem */
@@ -347,6 +355,18 @@ static int fix_lk_props(void *dst, const void *lk)
 				err = fdt_setprop_u32(dst, d, "phandle", ph);
 			if (err) {
 				log_err(r->path, r->prop, err);
+				return err;
+			}
+		}
+		if (r->pool) {
+			err = fdt_setprop_string(dst, d, "compatible", r->pool);
+			if (!err) {
+				err = fdt_delprop(dst, d, "no-map");
+				if (err == -FDT_ERR_NOTFOUND)
+					err = 0;
+			}
+			if (err) {
+				log_err(r->path, r->pool, err);
 				return err;
 			}
 		}
