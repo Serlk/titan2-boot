@@ -12,11 +12,11 @@
  *  - /memory reg (all DRAM);
  *  - every /reserved-memory/mblock-* node (BL31, TEE, GZ, modem, SCP, SSPM,
  *    pstore, framebuffer, ...) without its phandle; the framebuffer gets
- *    no-map, so simplefb can map it, and the Wi-Fi pool becomes a mapped
- *    restricted-dma-pool;
+ *    no-map, so simplefb can map it;
  *  - the LK entries of /chosen (atag,*, kaslr-seed, ram_console, ...);
  *  - the properties LK writes into device nodes the mainline drivers use
- *    (lk_props[] below; phandles into /reserved-memory: lk_refs[]) and the
+ *    (lk_props[] below; phandles into /reserved-memory: lk_refs[] and what
+ *    the DTB asks for with titan2,lk-refs) and the
  *    nodes LK creates for the modem.
  *
  * bootargs are put together the way LK does it for a kernel booted directly:
@@ -62,7 +62,6 @@ static const struct lk_prop_rule lk_props[] = {
 struct lk_ref_rule {
 	const char *path;	/* the same path in both FDTs */
 	const char *prop;	/* one phandle to a /reserved-memory node */
-	const char *pool;	/* or NULL: new compatible of the target, mapped */
 };
 
 /*
@@ -71,15 +70,25 @@ struct lk_ref_rule {
  * that copy, by node name.
  */
 static const struct lk_ref_rule lk_refs[] = {
-	/*
-	 * WFDMA pool for mt7921-soc. LK's EMI MPU lets CONNSYS reach this
-	 * pool only, and MediaTek's driver copies every command, event and
-	 * frame through it. As a restricted DMA pool (which must not be
-	 * no-map) all DMA of the device bounces through it, not only the
-	 * rings.
-	 */
-	{ "/wifi@18400000", "memory-region", "restricted-dma-pool" },
+	/* WFDMA pool for mt7921-soc (also for DTBs without titan2,lk-refs) */
+	{ "/wifi@18400000", "memory-region" },
 };
+
+/*
+ * The mainline DTB can ask for more, so that such changes come with the
+ * DTB and not with a new boot_a. In any node:
+ *   titan2,lk-refs = "memory-region", ...;   phandles to take from LK's
+ *                                            node of the same path
+ *   titan2,lk-region-compatible = "...";     new compatible of the
+ *                                            reserved-memory nodes these
+ *                                            phandles point to
+ *   titan2,lk-region-map;                    drop their no-map
+ * (e.g. LK's Wi-Fi pool as a restricted-dma-pool, which must be mapped).
+ */
+#define LK_REFS_PROP		"titan2,lk-refs"
+#define LK_REGION_COMPAT_PROP	"titan2,lk-region-compatible"
+#define LK_REGION_MAP_PROP	"titan2,lk-region-map"
+#define PATH_MAX_LEN		128
 
 /* root nodes LK creates for the modem */
 static const char *const lk_root_nodes[] = { "mdproperties", "md_attr_node", NULL };
@@ -295,6 +304,135 @@ static int fix_chosen(void *dst, const void *lk, const char *cmdline, u64 initrd
 	return err;
 }
 
+/* the region a reference points to, as the mainline node at path asks for */
+static int fix_lk_region(void *dst, int d, const char *path)
+{
+	int n = fdt_path_offset(dst, path);
+	const char *compat;
+	int len, err;
+
+	if (n < 0)
+		return 0;
+	compat = fdt_getprop(dst, n, LK_REGION_COMPAT_PROP, &len);
+	if (compat && len > 1) {
+		/* the string is copied before dst moves */
+		char buf[64];
+
+		if ((size_t)len > sizeof(buf))
+			return -FDT_ERR_BADVALUE;
+		memcpy(buf, compat, len);
+		buf[len - 1] = 0;
+		err = fdt_setprop_string(dst, d, "compatible", buf);
+		if (err)
+			return err;
+		n = fdt_path_offset(dst, path);
+		if (n < 0)
+			return 0;
+	}
+	if (fdt_getprop(dst, n, LK_REGION_MAP_PROP, NULL)) {
+		err = fdt_delprop(dst, d, "no-map");
+		if (err && err != -FDT_ERR_NOTFOUND)
+			return err;
+	}
+	return 0;
+}
+
+/* point prop of the node at path to our copy of the region LK's prop points to */
+static int fix_lk_ref(void *dst, const void *lk, const char *path, const char *prop)
+{
+	const fdt32_t *ref;
+	const char *name;
+	uint32_t ph;
+	int len, s, t, rm, d, err;
+
+	s = fdt_path_offset(lk, path);
+	ref = s >= 0 ? fdt_getprop(lk, s, prop, &len) : NULL;
+	if (!ref || len != 4)
+		return 0;
+	t = fdt_node_offset_by_phandle(lk, fdt32_to_cpu(*ref));
+	rm = fdt_path_offset(dst, "/reserved-memory");
+	name = t >= 0 ? fdt_get_name(lk, t, NULL) : NULL;
+	d = name && rm >= 0 ? fdt_subnode_offset(dst, rm, name) : -FDT_ERR_NOTFOUND;
+	if (d < 0) {
+		log_puts(path);
+		uart_puts(": target of ");
+		uart_puts(prop);
+		uart_puts(" not among the copied reserved-memory nodes\n");
+		return 0;
+	}
+	ph = fdt_get_phandle(dst, d);
+	if (!ph) {
+		err = fdt_generate_phandle(dst, &ph);
+		if (!err)
+			err = fdt_setprop_u32(dst, d, "phandle", ph);
+		if (err) {
+			log_err(path, prop, err);
+			return err;
+		}
+	}
+	err = fix_lk_region(dst, d, path);
+	if (err) {
+		log_err(path, LK_REGION_COMPAT_PROP, err);
+		return err;
+	}
+	d = fdt_path_offset(dst, path);
+	if (d < 0) {
+		log_puts(path);
+		uart_puts(": not in the mainline DTB\n");
+		return 0;
+	}
+	err = fdt_setprop_u32(dst, d, prop, ph);
+	if (err)
+		log_err(path, prop, err);
+	return err;
+}
+
+/*
+ * The built-in rules, then every node of the mainline DTB with
+ * titan2,lk-refs. Only properties change, so the k-th such node stays
+ * the k-th one: count again from the start after each change.
+ */
+static int fix_lk_refs(void *dst, const void *lk)
+{
+	static char path[PATH_MAX_LEN];
+	static char props[PATH_MAX_LEN];
+	unsigned int i;
+	int k, err;
+
+	for (i = 0; i < sizeof(lk_refs) / sizeof(lk_refs[0]); i++) {
+		err = fix_lk_ref(dst, lk, lk_refs[i].path, lk_refs[i].prop);
+		if (err)
+			return err;
+	}
+
+	for (k = 0;; k++) {
+		const char *list, *p;
+		int n = -1, depth = 0, seen = -1, len;
+
+		while ((n = fdt_next_node(dst, n, &depth)) >= 0)
+			if (fdt_getprop(dst, n, LK_REFS_PROP, NULL) && ++seen == k)
+				break;
+		if (n < 0)
+			return 0;
+		list = fdt_getprop(dst, n, LK_REFS_PROP, &len);
+		err = fdt_get_path(dst, n, path, sizeof(path));
+		if (err || len < 1 || (size_t)len > sizeof(props)) {
+			log_err("", LK_REFS_PROP, err ?: -FDT_ERR_BADVALUE);
+			continue;
+		}
+		/* copied: list moves with dst */
+		memcpy(props, list, len);
+		props[len - 1] = 0;
+		for (p = props; p < props + len; p += strlen(p) + 1) {
+			if (!*p)
+				continue;
+			err = fix_lk_ref(dst, lk, path, p);
+			if (err)
+				return err;
+		}
+	}
+}
+
 static int fix_lk_props(void *dst, const void *lk)
 {
 	unsigned int i;
@@ -326,62 +464,9 @@ static int fix_lk_props(void *dst, const void *lk)
 		}
 	}
 
-	for (i = 0; i < sizeof(lk_refs) / sizeof(lk_refs[0]); i++) {
-		const struct lk_ref_rule *r = &lk_refs[i];
-		const fdt32_t *ref;
-		const char *name;
-		uint32_t ph;
-		int len, s, t, rm, d;
-
-		s = fdt_path_offset(lk, r->path);
-		ref = s >= 0 ? fdt_getprop(lk, s, r->prop, &len) : NULL;
-		if (!ref || len != 4)
-			continue;
-		t = fdt_node_offset_by_phandle(lk, fdt32_to_cpu(*ref));
-		rm = fdt_path_offset(dst, "/reserved-memory");
-		name = t >= 0 ? fdt_get_name(lk, t, NULL) : NULL;
-		d = name && rm >= 0 ? fdt_subnode_offset(dst, rm, name) : -FDT_ERR_NOTFOUND;
-		if (d < 0) {
-			log_puts(r->path);
-			uart_puts(": target of ");
-			uart_puts(r->prop);
-			uart_puts(" not among the copied reserved-memory nodes\n");
-			continue;
-		}
-		ph = fdt_get_phandle(dst, d);
-		if (!ph) {
-			err = fdt_generate_phandle(dst, &ph);
-			if (!err)
-				err = fdt_setprop_u32(dst, d, "phandle", ph);
-			if (err) {
-				log_err(r->path, r->prop, err);
-				return err;
-			}
-		}
-		if (r->pool) {
-			err = fdt_setprop_string(dst, d, "compatible", r->pool);
-			if (!err) {
-				err = fdt_delprop(dst, d, "no-map");
-				if (err == -FDT_ERR_NOTFOUND)
-					err = 0;
-			}
-			if (err) {
-				log_err(r->path, r->pool, err);
-				return err;
-			}
-		}
-		d = fdt_path_offset(dst, r->path);
-		if (d < 0) {
-			log_puts(r->path);
-			uart_puts(": not in the mainline DTB\n");
-			continue;
-		}
-		err = fdt_setprop_u32(dst, d, r->prop, ph);
-		if (err) {
-			log_err(r->path, r->prop, err);
-			return err;
-		}
-	}
+	err = fix_lk_refs(dst, lk);
+	if (err)
+		return err;
 
 	for (i = 0; lk_root_nodes[i]; i++) {
 		int s = fdt_subnode_offset(lk, 0, lk_root_nodes[i]);
