@@ -27,11 +27,31 @@
 #define PSTORE_SIG		0x43474244
 
 static volatile u32 *plog;
-static u32 plog_len;
+static u32 plog_start, plog_len;	/* the ring: first valid byte, valid bytes */
 
+#define PSTORE_CONSOLE_CAP	(PSTORE_CONSOLE_SIZE - 12)
+
+/*
+ * The console zone is one ring that the kernel never clears: at boot it
+ * saves what is there (the previous boot's console, /sys/fs/pstore/
+ * console-ramoops-0) and keeps appending. The menu does the same: its log
+ * goes after the previous kernel's console, so a hang leaves that console
+ * readable from the next boot. A zone without a valid header is started.
+ */
 void pstore_log_start(void)
 {
+	u32 start, size;
+
 	plog = (volatile u32 *)PSTORE_CONSOLE;
+	start = plog[1];
+	size = plog[2];
+	if (plog[0] == PSTORE_SIG && start < PSTORE_CONSOLE_CAP &&
+	    size <= PSTORE_CONSOLE_CAP) {
+		plog_start = start;
+		plog_len = size;
+		return;
+	}
+	plog_start = 0;
 	plog_len = 0;
 	plog[1] = 0;
 	plog[2] = 0;
@@ -40,12 +60,26 @@ void pstore_log_start(void)
 
 static void plog_putc(char c)
 {
-	if (!plog || plog_len >= PSTORE_CONSOLE_SIZE - 12)
+	volatile u8 *data = (volatile u8 *)&plog[3];
+	u32 pos;
+
+	if (!plog)
 		return;
-	((volatile u8 *)&plog[3])[plog_len++] = c;
+	if (plog_len < PSTORE_CONSOLE_CAP) {
+		pos = plog_start + plog_len;
+		if (pos >= PSTORE_CONSOLE_CAP)
+			pos -= PSTORE_CONSOLE_CAP;
+		plog_len++;
+	} else {
+		/* full: overwrite the oldest byte */
+		pos = plog_start;
+		if (++plog_start >= PSTORE_CONSOLE_CAP)
+			plog_start = 0;
+	}
+	data[pos] = c;
 	asm volatile("dsb st" ::: "memory");
 	plog[2] = plog_len;
-	plog[1] = plog_len;
+	plog[1] = plog_start;
 	asm volatile("dsb st" ::: "memory");
 }
 
