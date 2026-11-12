@@ -105,3 +105,5 @@ distributed under GPL-2.0-only. `libfdt/` is taken unmodified from the Linux ker
 descriptions of the hardware behaviour.
 
 This project is not affiliated with Unihertz or MediaTek.
+
+Licensing: [LICENSE](LICENSE) (GPL-2.0), per-file details in [LICENSING.md](LICENSING.md).

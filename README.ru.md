@@ -101,3 +101,5 @@ Copyright (c) 2026 serlk. GPL-2.0-or-later, см. [LICENSE](LICENSE). `src/font.
 файл). Кода производителя нет: UFS и дисплей написаны по нашему описанию поведения железа.
 
 Проект не связан с Unihertz и MediaTek.
+
+Лицензии: [LICENSE](LICENSE) (GPL-2.0), подробности по файлам — в [LICENSING.md](LICENSING.md).
