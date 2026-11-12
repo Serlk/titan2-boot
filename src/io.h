@@ -56,7 +56,7 @@ static inline u32 mmio_read32(u64 addr)
 #define TOPRGU_NONRST2	(TOPRGU_BASE + 0x24)	/* syscon-reboot-mode, [3:0] */
 #define TOPRGU_RST	(TOPRGU_BASE + 0x08)	/* WDT_RESTART, write 0x1971 */
 
-/* reboot-mode values (stock DT reboot-mode node) */
+/* reboot-mode values (factory DT reboot-mode node) */
 #define RBMODE_NORMAL	0
 #define RBMODE_RECOVERY	2
 #define RBMODE_FASTBOOT	3

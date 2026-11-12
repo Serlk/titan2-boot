@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /* Copyright (c) 2026 serlk <22211586+Serlk@users.noreply.github.com> */
 /*
- * titan2-boot: boot menu after the stock LK.
+ * titan2-boot: boot menu after the factory LK.
  *
  * LK loads boot_a (this loader and its file pack, src/pack.h) exactly like a
- * kernel, with vendor_boot_a, init_boot_a and dtbo_a stock, so the FDT in x0
+ * kernel, with vendor_boot_a, init_boot_a and dtbo_a unchanged, so the FDT in x0
  * is Android's. The menu lists the entries of the pack's extlinux.conf
  * (src/conf.c); with "UFS on" in it, one more item, "Linux partition", which
  * starts the UFS only when chosen (or as the default) and lists the entries of

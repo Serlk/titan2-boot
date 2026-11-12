@@ -7,7 +7,7 @@
 
 /*
  * Build the FDT for a mainline kernel in out[out_size]: the mainline DTB from
- * the pack plus what LK wrote into its own (stock) FDT. Returns 0 or a
+ * the pack plus what LK wrote into its own (factory) FDT. Returns 0 or a
  * negative libfdt error.
  */
 int linux_fdt_build(const void *lk_fdt, const void *dtb, void *out, u64 out_size,

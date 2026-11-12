@@ -3,7 +3,7 @@
 /*
  * Mainline FDT from LK's FDT.
  *
- * With titan2-boot in boot_a, vendor_boot_a and dtbo_a stay stock, so LK
+ * With titan2-boot in boot_a, vendor_boot_a and dtbo_a stay the factory ones, so LK
  * builds Android's FDT: memory map, firmware loading and the properties it
  * fills in, all as for Android. A mainline kernel gets its own DTB from the
  * pack instead, and this file carries over what LK found out at run time

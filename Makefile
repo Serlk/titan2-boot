@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (c) 2026 serlk <22211586+Serlk@users.noreply.github.com>
-# titan2-boot: aarch64 bare-metal boot menu after the stock LK, packaged as an
-# arm64 Image so the stock Titan 2 LK loads it like a kernel.
+# titan2-boot: aarch64 bare-metal boot menu after the factory LK, packaged as an
+# arm64 Image so the factory Titan 2 LK loads it like a kernel.
 #
 # Build (nothing here is flashed):
 #   make TOOLCHAIN=/path/to/clang-r574158   (AOSP prebuilt clang 21, see README)

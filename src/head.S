@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* Copyright (c) 2026 serlk <22211586+Serlk@users.noreply.github.com> */
 /*
- * titan2-boot: entry point packaged as an arm64 Linux Image, so the stock
+ * titan2-boot: entry point packaged as an arm64 Linux Image, so the factory
  * Titan 2 LK loads and jumps to it exactly like a kernel.
  *
- * Stock LK gunzips us to 0x40000000 and enters at the first instruction with
+ * The factory LK gunzips us to 0x40000000 and enters at the first instruction with
  * MMU off, D-cache off, IRQs masked, at EL1 (GenieZone owns EL2), x0 = FDT
  * blob at 0x47c80000 (see titan2-docs: docs/lk-boot-requirements.md).
  *

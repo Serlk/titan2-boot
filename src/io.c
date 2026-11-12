@@ -3,7 +3,7 @@
 /*
  * Minimal bare-metal I/O for titan2-boot: UART log, timer, keypad read and
  * watchdog/reboot. All hardware is already powered and configured by the
- * stock preloader/bl2_ext/LK (titan2-docs: docs/hardware), so we only touch
+ * factory preloader/bl2_ext/LK (titan2-docs: docs/hardware), so we only touch
  * registers, never re-init clocks or power.
  */
 #include "io.h"
@@ -16,7 +16,7 @@
 /*
  * Copy of the log in the console zone of Android's ramoops (pstore), started
  * by pstore_log_start(): after a watchdog reset the next Android boot shows
- * it in /sys/fs/pstore/console-ramoops-0. Layout from the stock command line
+ * it in /sys/fs/pstore/console-ramoops-0. Layout from the factory command line
  * (ramoops.mem_address=0x48090000 mem_size=0xe0000 console_size=0x40000
  * pmsg_size=0x80000) and Android's record_size 0x1000, ftrace_size 0x1000:
  * 31 dmesg zones, then the console zone. Zone header as in the kernel's
@@ -167,7 +167,7 @@ void __attribute__((noreturn)) reboot_with_mode(int mode)
 
 	v = (v & ~0xfu) | (mode & 0xf);
 	mmio_write32(TOPRGU_NONRST2, v);
-	/* PSCI SYSTEM_RESET via SMC (stock psci { method = "smc"; }). */
+	/* PSCI SYSTEM_RESET via SMC (factory DT: psci { method = "smc"; }). */
 	register u64 x0 asm("x0") = 0x84000009UL;
 	asm volatile("smc #0" : "+r"(x0) : : "x1", "x2", "x3", "memory");
 	for (;;)
@@ -185,7 +185,7 @@ static void rmw(u64 reg, u32 clr, u32 set)
 }
 
 /*
- * What Android does before it reads them (stock DT key-default: input-enable,
+ * What Android does before it reads them (factory DT key-default: input-enable,
  * bias-pull-up; gpio-keys requests the GPIO as input) and mainline likewise.
  * After LK the reading did not change on key presses.
  */

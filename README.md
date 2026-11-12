@@ -4,9 +4,9 @@
 [Русская версия](README.ru.md)
 
 A boot menu for the Unihertz Titan 2 (MT6878): Android or mainline Linux. It is an aarch64
-bare-metal second stage after the stock LK. The stock LK is never replaced or reflashed: it loads
+bare-metal second stage after the factory LK. The factory LK is never replaced or reflashed: it loads
 this image from `boot_a` exactly like a kernel (gunzip to 0x40000000, jump at EL1 with x0 = the FDT
-it has already built). How the stock LK loads an image is described in titan2-docs:
+it has already built). How the factory LK loads an image is described in titan2-docs:
 `docs/lk-boot-requirements.md`.
 
 Works on the phone (2026-10-24): the menu, Android, recovery and power-off charging, mainline
@@ -21,7 +21,7 @@ the menu gets one more item, "Linux partition": only when it is chosen (or is th
 `/boot/extlinux/extlinux.conf` on the ext4 partition `linux` (`src/blk.c` GPT, `src/ext4.c`).
 The Android kernel stays in the pack, so recovery, power-off charging and a normal Android boot
 never depend on the UFS reader.
-`vendor_boot_a`, `init_boot_a` and `dtbo_a` stay Android's, so LK builds the stock FDT and loads
+`vendor_boot_a`, `init_boot_a` and `dtbo_a` stay Android's, so LK builds the factory FDT and loads
 the firmware (SCP, modem, ...) as it does for Android.
 
 Kernels may be raw, gzip or lz4 (`src/inflate.c`, `src/lz4.c`). They are unpacked into free
@@ -85,10 +85,10 @@ starts, so a hang can be read back in `/sys/fs/pstore/console-ramoops-0` after t
 
 ## Sources
 
-The hardware facts used here (addresses, register values, the state the stock
+The hardware facts used here (addresses, register values, the state the factory
 boot loader leaves the hardware in) come from the phone itself: register
 readings on the device, the factory device tree and boot logs, the phone's
-GPL-declared kernel modules and an analysis of the behaviour of the stock boot
+GPL-declared kernel modules and an analysis of the behaviour of the factory boot
 loader (no boot loader code is reproduced); public MediaTek GPL sources and
 upstream Linux were used for comparison. The UFS reader is written by the
 clean-room method: from `spec/ufs-mt6878.md`, a description of facts only, by

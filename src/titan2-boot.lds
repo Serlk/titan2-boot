@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* Copyright (c) 2026 serlk <22211586+Serlk@users.noreply.github.com> */
 /*
- * titan2-boot link script. The stock LK gunzips us to 0x40000000 and enters
+ * titan2-boot link script. The factory LK gunzips us to 0x40000000 and enters
  * at _start, so we link at that address. _image_size is exported for the
  * arm64 Image header.
  */

@@ -4,7 +4,7 @@
 """Offline sanity check for the titan2-boot arm64 Image (no device needed).
 
 Verifies the 64-byte arm64 Image header (Documentation/arm64/booting.rst) and
-that the image fits where the stock LK will place it (0x40000000, limit
+that the image fits where the factory LK will place it (0x40000000, limit
 0x7c80000; see titan2-docs: docs/lk-boot-requirements.md). Run by the Makefile after each build.
 """
 import struct
