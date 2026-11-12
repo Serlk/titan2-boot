@@ -85,6 +85,9 @@ static char conf_text[CONF_TEXT_MAX];
 /* set when the PMIC answers: Power selects, else Volume Down does (as in LK's menu) */
 static int power_key_ok;
 static int item_h, item_s;	/* layout for n_items */
+static int rows, first_item;	/* visible window of items (a long partition list scrolls) */
+
+#define ITEM_H_MIN	48	/* a row at scale 1 (font 32 px) with some air */
 
 static void layout(void)
 {
@@ -93,19 +96,46 @@ static void layout(void)
 	if (n_items * 120 <= avail) {
 		item_h = 120;
 		item_s = 2;
-	} else {
+		rows = n_items;
+	} else if (n_items * ITEM_H_MIN <= avail) {
 		item_h = avail / n_items;
 		item_s = 1;
+		rows = n_items;
+	} else {
+		item_h = ITEM_H_MIN;
+		item_s = 1;
+		rows = avail / ITEM_H_MIN;
 	}
+	if (first_item > n_items - rows)
+		first_item = n_items - rows;
+	if (first_item < 0)
+		first_item = 0;
+}
+
+/* scroll so that item sel is visible; returns 1 when the window moved */
+static int scroll_to(int sel)
+{
+	int first = first_item;
+
+	if (sel < first)
+		first = sel;
+	else if (sel >= first + rows)
+		first = sel - rows + 1;
+	if (first == first_item)
+		return 0;
+	first_item = first;
+	return 1;
 }
 
 static void draw_item(int i, int sel)
 {
-	int y = ITEMS_Y + i * item_h;
+	int y = ITEMS_Y + (i - first_item) * item_h;
 	int pad = (item_h - TEXT_H(item_s)) / 2;
 	u32 bg = sel ? COL_SEL_BG : COL_BG;
 	u32 fg = sel ? COL_SEL_FG : COL_FG;
 
+	if (i < first_item || i >= first_item + rows)
+		return;
 	if (pad > 20)
 		pad = 20;
 	fb_fill(ITEM_X - 40, y - pad, FB_W - 2 * (ITEM_X - 40), TEXT_H(item_s) + 2 * pad, bg);
@@ -138,8 +168,13 @@ static void draw_menu(int sel)
 	fb_text((FB_W - fb_text_width(3, menu_title)) / 2, TITLE_Y, 3, COL_TITLE, COL_BG, menu_title);
 	fb_text((FB_W - fb_text_width(1, storage_status)) / 2, TITLE_Y + TEXT_H(3) + 24, 1, COL_DIM,
 		COL_BG, storage_status);
+	scroll_to(sel);
 	for (i = 0; i < n_items; i++)
 		draw_item(i, i == sel);
+	if (first_item > 0)
+		fb_text(ITEM_X - 40, ITEMS_Y - TEXT_H(1) - 4, 1, COL_DIM, COL_BG, "^ more");
+	if (first_item + rows < n_items)
+		fb_text(ITEM_X - 40, ITEMS_Y + rows * item_h + 4, 1, COL_DIM, COL_BG, "v more");
 	fb_text((FB_W - fb_text_width(1, hint)) / 2, HINT_Y, 1, COL_DIM, COL_BG, hint);
 }
 
@@ -518,7 +553,10 @@ void bl_main(void)
 			} else {
 				draw_item(sel, 0);
 				sel = (sel + move + n_items) % n_items;
-				draw_item(sel, 1);
+				if (scroll_to(sel))
+					draw_menu(sel);
+				else
+					draw_item(sel, 1);
 			}
 			disp_flush();
 		}

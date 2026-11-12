@@ -7,7 +7,7 @@
 
 struct fs;
 
-#define CONF_MAX_ENTRIES	12
+#define CONF_MAX_ENTRIES	24
 #define CONF_PATH		128
 #define CONF_APPEND		1024
 #define CONF_NAME		48
