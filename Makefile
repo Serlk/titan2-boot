@@ -4,7 +4,8 @@
 # arm64 Image so the factory Titan 2 LK loads it like a kernel.
 #
 # Build (nothing here is flashed):
-#   make TOOLCHAIN=/path/to/clang-r574158   (AOSP prebuilt clang 21, see README)
+#   make TOOLCHAIN=/path/to/clang-21        (AOSP prebuilt clang r574158 or the LLVM 21.1.8
+#                                           release, see README; CLANG_DIR is taken as well)
 #   make test LK_FDT=<LK's FDT> DTB=<mainline DTB> [DECOMP_IMAGE=<Image>]
 #                                           host tests: FDT merge, gzip/lz4, memory map,
 #                                           extlinux.conf, GPT + ext4, UFS lane trim
@@ -13,7 +14,8 @@
 # Output: out/titan2-boot.bin (raw Image, no payloads). tools/mkpack.py adds
 # the kernels and makes the boot.img.
 
-TOOLCHAIN ?= ../toolchains/clang-r574158
+CLANG_DIR ?= ../toolchains/clang-r574158
+TOOLCHAIN ?= $(CLANG_DIR)
 CC        := $(TOOLCHAIN)/bin/clang
 LD        := $(TOOLCHAIN)/bin/ld.lld
 OBJCOPY   := $(TOOLCHAIN)/bin/llvm-objcopy
@@ -40,17 +42,24 @@ all: $(OUT)/titan2-boot.bin
 $(OUT) $(OUT)/libfdt $(OUT)/host:
 	mkdir -p $@
 
-$(OUT)/%.o: src/%.S | $(OUT)
+# The toolchain and the flags are part of the build: $(OUT)/build.id holds them and changes
+# (so everything is rebuilt) only when they do, e.g. another TOOLCHAIN or EXTRA_CFLAGS.
+BUILD_ID := $(abspath $(TOOLCHAIN)) $(shell $(CC) --version 2>/dev/null | head -n 1) $(CFLAGS) $(EXTRA_LDFLAGS)
+BUILD_ID := $(subst ','',$(BUILD_ID))
+$(OUT)/build.id: FORCE | $(OUT)
+	@echo '$(BUILD_ID)' | cmp -s - $@ || echo '$(BUILD_ID)' >$@
+
+$(OUT)/%.o: src/%.S $(OUT)/build.id | $(OUT)
 	$(CC) $(ASFLAGS) $< -o $@
 
-$(OUT)/%.o: src/%.c $(HDRS) | $(OUT)
+$(OUT)/%.o: src/%.c $(HDRS) $(OUT)/build.id | $(OUT)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # libfdt is upstream code: keep its warnings out of ours
-$(OUT)/libfdt/%.o: libfdt/%.c $(HDRS) | $(OUT)/libfdt
+$(OUT)/libfdt/%.o: libfdt/%.c $(HDRS) $(OUT)/build.id | $(OUT)/libfdt
 	$(CC) $(CFLAGS) -Wno-sign-compare -Wno-unused-parameter -c $< -o $@
 
-$(OUT)/titan2-boot.elf: $(OBJS) src/titan2-boot.lds
+$(OUT)/titan2-boot.elf: $(OBJS) src/titan2-boot.lds $(OUT)/build.id
 	$(LD) $(LDFLAGS) $(EXTRA_LDFLAGS) -T src/titan2-boot.lds $(OBJS) -o $@
 
 $(OUT)/titan2-boot.bin: $(OUT)/titan2-boot.elf
@@ -95,4 +104,6 @@ qemu:
 clean:
 	rm -rf out out-qemu
 
-.PHONY: all clean test qemu
+FORCE:
+
+.PHONY: all clean test qemu FORCE

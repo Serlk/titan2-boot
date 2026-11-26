@@ -57,12 +57,16 @@ countdown with a progress bar runs to the default entry.
 ## Build
 
 ```
-make TOOLCHAIN=/path/to/clang-r574158       # out/titan2-boot.bin (no pack)
+make TOOLCHAIN=/path/to/clang-21            # out/titan2-boot.bin (no pack)
 make test LK_FDT=<LK's FDT> DTB=<mainline DTB>   # the LK data merge on the host (cc, ASan/UBSan)
 make qemu                                   # test build for qemu virt (out-qemu/)
 ```
 
-The toolchain is the AOSP prebuilt clang r574158 (clang 21). The build uses `-mstrict-align`
+The toolchain is clang 21: the AOSP prebuilt clang r574158 or the official LLVM 21.1.8 release
+(`TOOLCHAIN=` or `CLANG_DIR=`, the directory with `bin/clang`). `ld.lld` of the LLVM release needs
+the host's `libxml2.so.2`; `scripts/make-bootmenu.sh` of titan2-tools runs this make in its build
+container, where that library is present. A change of the toolchain or of the flags rebuilds
+everything (`out/build.id`). The build uses `-mstrict-align`
 (the code runs with the MMU off until the memory map is set up). The boot.img is made by the
 scripts of titan2-tools: `scripts/make-bootmenu.sh` (with `tools/mkpack.py` from here), and the
 qemu test is `scripts/test-bootmenu-qemu.sh`. Installing Android + Linux side by side:

@@ -56,12 +56,15 @@ U-Boot, `src/conf.c`) с пунктами меню; при `UFS on` в меню 
 ## Сборка
 
 ```
-make TOOLCHAIN=/путь/к/clang-r574158      # out/titan2-boot.bin (без пачки)
+make TOOLCHAIN=/путь/к/clang-21           # out/titan2-boot.bin (без пачки)
 make test LK_FDT=<FDT LK> DTB=<DTB mainline>   # перенос данных LK на ПК (cc, ASan/UBSan)
 make qemu                                 # тестовая сборка для qemu virt (out-qemu/)
 ```
 
-Компилятор — AOSP clang r574158 (clang 21). Сборка идёт с `-mstrict-align` (код работает с
+Компилятор — clang 21: AOSP clang r574158 или официальный выпуск LLVM 21.1.8 (`TOOLCHAIN=` или
+`CLANG_DIR=`, каталог с `bin/clang`). `ld.lld` из выпуска LLVM требует на ПК `libxml2.so.2`;
+`scripts/make-bootmenu.sh` из titan2-tools запускает эту сборку в своём контейнере, где эта
+библиотека есть. Смена компилятора или флагов пересобирает всё (`out/build.id`). Сборка идёт с `-mstrict-align` (код работает с
 выключенным MMU, пока не построена карта памяти). `boot.img` собирают скрипты titan2-tools:
 `scripts/make-bootmenu.sh` (с `tools/mkpack.py` отсюда) и проверка в qemu
 `scripts/test-bootmenu-qemu.sh`. Установка Android и Linux рядом — titan2-docs, `docs/DUALBOOT.md`.
