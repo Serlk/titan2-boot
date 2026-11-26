@@ -92,6 +92,14 @@ GPL и upstream Linux. Чтение UFS написано методом чист
 `spec/ufs-mt6878.md`, описанию из одних фактов, разработчиком, не видевшим
 анализа загрузчика. Проприетарного кода, прошивок и бинарных файлов здесь нет.
 
+## Связанные репозитории
+
+- [titan2-linux](https://github.com/Serlk/titan2-linux): ядро, ветка `titan2` (порт на mainline, который загружает это меню).
+- [titan2-tools](https://github.com/Serlk/titan2-tools): сборка образов (`scripts/make-bootmenu.sh` упаковывает это меню), initramfs, сетевой и дисковый корень, службы.
+- [titan2-docs](https://github.com/Serlk/titan2-docs): документация, в том числе инструкция по двойной загрузке `docs/DUALBOOT.md`.
+- [titan2-camera](https://github.com/Serlk/titan2-camera), [titan2-fingerprint](https://github.com/Serlk/titan2-fingerprint), [titan2-gnss](https://github.com/Serlk/titan2-gnss): необязательные части для камер, отпечатка и GNSS.
+- [titan2-android](https://github.com/Serlk/titan2-android): сборки Android для Titan 2.
+
 ## Лицензия
 
 Copyright (c) 2026 serlk. GPL-2.0-or-later, см. [LICENSE](LICENSE). `src/font.h` сгенерирован из

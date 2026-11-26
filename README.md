@@ -95,6 +95,14 @@ clean-room method: from `spec/ufs-mt6878.md`, a description of facts only, by
 a developer who did not see the boot loader analysis. No proprietary code,
 firmware or blobs are included.
 
+## Related repositories
+
+- [titan2-linux](https://github.com/Serlk/titan2-linux): the kernel, branch `titan2` (the mainline port this menu boots).
+- [titan2-tools](https://github.com/Serlk/titan2-tools): image builders (`scripts/make-bootmenu.sh` packs this menu), initramfs, network and disk root, services.
+- [titan2-docs](https://github.com/Serlk/titan2-docs): documentation, including the dual boot guide `docs/DUALBOOT.md`.
+- [titan2-camera](https://github.com/Serlk/titan2-camera), [titan2-fingerprint](https://github.com/Serlk/titan2-fingerprint), [titan2-gnss](https://github.com/Serlk/titan2-gnss): the optional camera, fingerprint and GNSS parts.
+- [titan2-android](https://github.com/Serlk/titan2-android): Android builds for the Titan 2.
+
 ## License
 
 Copyright (c) 2026 serlk. GPL-2.0-or-later, see [LICENSE](LICENSE). `src/font.h` is generated
